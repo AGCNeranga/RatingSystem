@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Race Matcher Pro</title>
+    <title>Race Daily Rating Pro</title>
     <style>
         :root {
             --bg-main: #fcfdfd;
@@ -220,8 +220,8 @@
 </head>
 <body oncontextmenu="return false;"> <div class="container">
     <header>
-        <h1>Race Intelligence <span style="font-weight: 300; color: var(--text-muted);">UK</span></h1>
-        <div class="top-controls">
+                <h1>RATING OF THE DAY <span style="font-weight: 300; color: var(--text-muted);">(UK)</span></h1><br>
+         <div class="top-controls">
             <div id="saveStatus" class="save-indicator">✓ AUTO-SAVED</div>
             <button class="btn btn-white" onclick="toggleTheme()" style="padding: 8px 15px;">🌓 Mode</button>
             <button class="btn btn-logout" onclick="logout()" style="padding: 8px 15px;">🏠 Logout</button>
@@ -253,7 +253,7 @@
     </div>
 
     <div class="output-header">
-        <label style="font-weight: 900; color: var(--primary-green);">MATCHED REPORT</label>
+        <label style="font-weight: 900; color: var(--primary-green);">Horses with a rating of 100 or above:</label>
         <input type="text" id="filterInput" class="search-bar" placeholder="Filter horse name..." onkeyup="filterOutput()">
     </div>
     <div id="output">System Ready...</div>
@@ -339,7 +339,13 @@ function processData() {
             if (meetingCodes[shortCode]) currentVenue = meetingCodes[shortCode];
         }
         let timeMatch = text.match(/(\d+)\s*—\s*(\d+)/);
-        if (timeMatch) currentTime = timeMatch[1] + "." + timeMatch[2];
+        if (timeMatch) {
+            let hour = parseInt(timeMatch[1]);
+            let minute = timeMatch[2];
+            // Convert to 24-hour format if hour is 1-11
+            if (hour < 12) hour += 12;
+            currentTime = hour + "." + minute;
+        }
         let horseMatch = text.match(/\((\d+)\)\s+([A-Z\s'’]+)/);
         if (horseMatch) {
             let hName = horseMatch[2].trim().toUpperCase();
@@ -407,6 +413,4 @@ function downloadOutput() {
 }
 </script>
 </body>
-
 </html>
-
