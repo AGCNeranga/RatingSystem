@@ -36,12 +36,11 @@
             padding: 20px;
             min-height: 100vh;
             transition: all 0.3s ease;
-            /* Disable text selection except for inputs */
             user-select: none; 
         }
 
         textarea, input, #output {
-            user-select: text; /* Allow users to copy/paste in these areas */
+            user-select: text;
         }
 
         .container {
@@ -218,10 +217,11 @@
         }
     </style>
 </head>
-<body oncontextmenu="return false;"> <div class="container">
+<body oncontextmenu="return false;"> 
+<div class="container">
     <header>
-                <h1>RATING OF THE DAY <span style="font-weight: 300; color: var(--text-muted);">(UK)</span></h1><br>
-         <div class="top-controls">
+        <h1>RATING OF THE DAY <span style="font-weight: 300; color: var(--text-muted);">(UK)</span></h1>
+        <div class="top-controls">
             <div id="saveStatus" class="save-indicator">✓ AUTO-SAVED</div>
             <button class="btn btn-white" onclick="toggleTheme()" style="padding: 8px 15px;">🌓 Mode</button>
             <button class="btn btn-logout" onclick="logout()" style="padding: 8px 15px;">🏠 Logout</button>
@@ -236,11 +236,11 @@
     <div class="grid">
         <div class="input-group">
             <label>1. 5Form Dummy PDF Text</label>
-            <textarea id="pdfInput" placeholder="Paste data..."></textarea>
+            <textarea id="pdfInput" placeholder="Paste 5Form PDF data here..."></textarea>
         </div>
         <div class="input-group">
             <label>2. Indd Ratings TXT</label>
-            <textarea id="ratingInput" placeholder="Paste ratings..."></textarea>
+            <textarea id="ratingInput" placeholder="Paste Indd ratings here..."></textarea>
         </div>
     </div>
 
@@ -262,36 +262,25 @@
 <div id="toast" class="toast">Copied to Clipboard!</div>
 
 <script>
-/** SECURITY: DISABLE SOURCE CODE VIEWING **/
+/** SECURITY **/
 document.onkeydown = function(e) {
-    // Disable F12
     if(event.keyCode == 123) return false;
-    // Disable Ctrl+Shift+I (Inspect)
-    if(e.ctrlKey && e.shiftKey && e.keyCode == 'I'.charCodeAt(0)) return false;
-    // Disable Ctrl+Shift+C (Inspect Element)
-    if(e.ctrlKey && e.shiftKey && e.keyCode == 'C'.charCodeAt(0)) return false;
-    // Disable Ctrl+Shift+J (Console)
-    if(e.ctrlKey && e.shiftKey && e.keyCode == 'J'.charCodeAt(0)) return false;
-    // Disable Ctrl+U (View Source)
+    if(e.ctrlKey && e.shiftKey && (e.keyCode == 'I'.charCodeAt(0) || e.keyCode == 'C'.charCodeAt(0) || e.keyCode == 'J'.charCodeAt(0))) return false;
     if(e.ctrlKey && e.keyCode == 'U'.charCodeAt(0)) return false;
 };
 
 function logout() {
     if(confirm("Are you sure you want to logout and return home?")) {
-        window.location.href = "https://agcneranga.github.io/LS-Publication/"; // Change this to your actual homepage URL
+        window.location.href = "https://agcneranga.github.io/LS-Publication/";
     }
 }
 
-/** DATA PROCESSING LOGIC **/
-const meetingCodes = {
-    "CT": "CATTERICK", "KM": "KEMPTON", "LE": "LEICESTER", "DR": "DONCASTER", 
-    "SO": "SOUTHWELL", "LI": "LINGFIELD", "KE": "KEMPTON", "CH": "CHELTENHAM", 
-    "FAK": "FAKENHAM", "WOL": "WOLVERHAMPTON", "GW": "GOWRAN PARK", "LP": "LEOPARDSTOWN",
-    "FH": "FAIRYHOUSE",  "CL": "CARLISLE", "TA": "TAUNTON", "AY": "AYR"
-    
-};
-
-let rawOutputLines = [];
+function updateCounters() {
+    const ratings = document.getElementById('ratingInput').value.split('\n').filter(l => l.trim()).length;
+    const matches = rawOutputLines.filter(line => line.includes('/')).length;
+    document.getElementById('totalCount').textContent = ratings;
+    document.getElementById('matchCount').textContent = matches;
+}
 
 window.onload = () => {
     if(localStorage.getItem('theme') === 'dark') document.body.setAttribute('data-theme', 'dark');
@@ -310,11 +299,13 @@ function toggleTheme() {
     localStorage.setItem('theme', isDark ? 'light' : 'dark');
 }
 
-function updateCounters() {
-    const ratings = document.getElementById('ratingInput').value.split('\n').filter(l => l.trim()).length;
-    const matches = rawOutputLines.filter(line => line.includes('/')).length;
-    document.getElementById('totalCount').textContent = ratings;
-    document.getElementById('matchCount').textContent = matches;
+function cleanHorseName(name) {
+    if (!name) return "";
+    return name.split('(')[0]
+               .replace(/[◆♠♣♥*]/g, '')
+               .replace(/['’]/g, '')
+               .trim()
+               .toUpperCase();
 }
 
 function processData() {
@@ -325,50 +316,61 @@ function processData() {
     localStorage.setItem('ratingData', ratingRaw);
 
     const pdfLines = pdfRaw.split('\n');
-    let currentVenue = "", currentRaceNum = "", currentTime = "", pdfMap = {};
+    let currentVenue = "UNKNOWN", currentRaceNum = "?", currentTime = "0.00", pdfMap = {};
 
     pdfLines.forEach(line => {
         let text = line.trim();
         if (!text) return;
-        const isExcluded = /[£€$¥\d+m\s\d+f]/.test(text) || ["DRAW", "GOING", "TRICAST", "PREVIOUS", "UPWARDS"].some(w => text.includes(w));
-        if (text === text.toUpperCase() && text.length > 3 && !text.includes('(') && !text.includes('/') && !isExcluded) {
+
+        // 1. Detect Venue (Stand-alone capitalized words like "ANGERS", "BAHRAIN")
+        if (text === text.toUpperCase() && text.length > 3 && !text.includes('(') && !text.includes('£') && !text.includes('—')) {
             currentVenue = text;
         }
-        let raceMatch = text.match(/([A-Z]+)\/(\d+)/i);
-        if (raceMatch) {
-            let shortCode = raceMatch[1].toUpperCase();
-            currentRaceNum = raceMatch[2];
-            if (meetingCodes[shortCode]) currentVenue = meetingCodes[shortCode];
+
+        // 2. Detect Race Number and Time from headers (e.g., "AgC/1 10—00" or "(3.30)")
+        let raceHeaderMatch = text.match(/([A-Z]+)\/(\d+)\s+(\d+—\d+)/i);
+        if (raceHeaderMatch) {
+            currentRaceNum = raceHeaderMatch[2];
+            currentTime = raceHeaderMatch[3].replace('—', '.');
         }
-        let timeMatch = text.match(/(\d+)\s*—\s*(\d+)/);
-        if (timeMatch) {
-            let hour = parseInt(timeMatch[1]);
-            let minute = timeMatch[2];
-            // Convert to 24-hour format if hour is 1-11
-            if (hour < 12) hour += 12;
-            currentTime = hour + "." + minute;
+
+        let timeParenthesisMatch = text.match(/^\((\d+\.\d+)\)$/);
+        if (timeParenthesisMatch) {
+            currentTime = timeParenthesisMatch[1];
         }
-        let horseMatch = text.match(/\((\d+)\)\s+([A-Z\s'’]+)/);
+
+        // 3. Detect Horse Names from PDF rows
+        // Matches patterns like "(1) LESTER(FR)" or "(2) LES VALLONS(FR)(B)"
+        let horseMatch = text.match(/\((\d+)\)\s*([A-Z\s◆♠♣♥'’\-]+)/i);
         if (horseMatch) {
-            let hName = horseMatch[2].trim().toUpperCase();
-            pdfMap[hName] = { venue: currentVenue || "UNKNOWN", time: currentTime || "0.00", raceNo: currentRaceNum || "?" };
+            let hName = cleanHorseName(horseMatch[2]);
+            if (hName) {
+                pdfMap[hName] = { 
+                    venue: currentVenue, 
+                    time: currentTime, 
+                    raceNo: currentRaceNum 
+                };
+            }
         }
     });
 
     const ratingLines = ratingRaw.split('\n');
     rawOutputLines = [];
+    
     ratingLines.forEach(line => {
         if (!line.trim()) return;
+        
         let parts = line.split(/(\t+|\s{2,})/);
         if (parts.length >= 3) {
-            let originalNamePart = parts[0].trim();
-            let cleanedKey = originalNamePart.split('(')[0].replace(/['’]/g, '').trim().toUpperCase();
-            let ratingPart = parts[parts.length - 1].trim();
-            let matchedKey = Object.keys(pdfMap).find(k => k.replace(/['’]/g, '') === cleanedKey);
-            if (matchedKey) {
-                let d = pdfMap[matchedKey];
-                let info = `${d.time}/${d.venue} (${d.raceNo})`;
-                rawOutputLines.push(`${originalNamePart.padEnd(25, ' ')}\t${info.padEnd(35, ' ')}\t${ratingPart}`);
+            let horseNamePart = parts[0].trim();
+            let ratingVal = parts[parts.length - 1].trim();
+            let cleanKey = cleanHorseName(horseNamePart);
+            
+            let match = pdfMap[cleanKey];
+
+            if (match) {
+                let formattedInfo = `${match.time}/${match.venue} (${match.raceNo})`;
+                rawOutputLines.push(`${horseNamePart.padEnd(25, ' ')}\t${formattedInfo.padEnd(35, ' ')}\t${ratingVal}`);
             } else {
                 rawOutputLines.push(line);
             }
@@ -416,7 +418,3 @@ function downloadOutput() {
 </script>
 </body>
 </html>
-
-
-
-
