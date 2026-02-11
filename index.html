@@ -275,6 +275,8 @@ function logout() {
     }
 }
 
+let rawOutputLines = [];
+
 function updateCounters() {
     const ratings = document.getElementById('ratingInput').value.split('\n').filter(l => l.trim()).length;
     const matches = rawOutputLines.filter(line => line.includes('/')).length;
@@ -316,38 +318,27 @@ function processData() {
     localStorage.setItem('ratingData', ratingRaw);
 
     const pdfLines = pdfRaw.split('\n');
-    let currentVenue = "UNKNOWN", currentRaceNum = "?", currentTime = "0.00", pdfMap = {};
+    let currentVenue = "UNKNOWN", currentRaceNum = "?", pdfMap = {};
 
     pdfLines.forEach(line => {
         let text = line.trim();
         if (!text) return;
 
-        // 1. Detect Venue (Stand-alone capitalized words like "ANGERS", "BAHRAIN")
         if (text === text.toUpperCase() && text.length > 3 && !text.includes('(') && !text.includes('£') && !text.includes('—')) {
             currentVenue = text;
         }
 
-        // 2. Detect Race Number and Time from headers (e.g., "AgC/1 10—00" or "(3.30)")
         let raceHeaderMatch = text.match(/([A-Z]+)\/(\d+)\s+(\d+—\d+)/i);
         if (raceHeaderMatch) {
             currentRaceNum = raceHeaderMatch[2];
-            currentTime = raceHeaderMatch[3].replace('—', '.');
         }
 
-        let timeParenthesisMatch = text.match(/^\((\d+\.\d+)\)$/);
-        if (timeParenthesisMatch) {
-            currentTime = timeParenthesisMatch[1];
-        }
-
-        // 3. Detect Horse Names from PDF rows
-        // Matches patterns like "(1) LESTER(FR)" or "(2) LES VALLONS(FR)(B)"
         let horseMatch = text.match(/\((\d+)\)\s*([A-Z\s◆♠♣♥'’\-]+)/i);
         if (horseMatch) {
             let hName = cleanHorseName(horseMatch[2]);
             if (hName) {
                 pdfMap[hName] = { 
                     venue: currentVenue, 
-                    time: currentTime, 
                     raceNo: currentRaceNum 
                 };
             }
@@ -360,7 +351,13 @@ function processData() {
     ratingLines.forEach(line => {
         if (!line.trim()) return;
         
+        // Split by tabs or multiple spaces
         let parts = line.split(/(\t+|\s{2,})/);
+        
+        // This regex extracts the time (e.g., 15.25) from the beginning or mid of the line
+        let timeMatch = line.match(/(\d{1,2}\.\d{2})/);
+        let extractedTime = timeMatch ? timeMatch[1] : "0.00";
+
         if (parts.length >= 3) {
             let horseNamePart = parts[0].trim();
             let ratingVal = parts[parts.length - 1].trim();
@@ -369,7 +366,8 @@ function processData() {
             let match = pdfMap[cleanKey];
 
             if (match) {
-                let formattedInfo = `${match.time}/${match.venue} (${match.raceNo})`;
+                // Uses the time directly from the Input 2 (Rating TXT) instead of PDF
+                let formattedInfo = `${extractedTime}/${match.venue} (${match.raceNo})`;
                 rawOutputLines.push(`${horseNamePart.padEnd(25, ' ')}\t${formattedInfo.padEnd(35, ' ')}\t${ratingVal}`);
             } else {
                 rawOutputLines.push(line);
